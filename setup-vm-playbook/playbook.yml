@@ -20,17 +20,19 @@
         commands: ALL
     - name: Fetch private key
       ansible.builtin.fetch:
+        flat: true
         src: /home/user/.ssh/id_ed25519
-        dest: id_user_{{ ansible_host | lower }}
+        dest: ./
     - name: Fetch public key
       ansible.builtin.fetch:
+        flat: true
         src: /home/user/.ssh/id_ed25519.pub
-        dest: id_user.pub
+        dest: ./
     - name: Add key to authorized keys
       ansible.posix.authorized_key:
         user: user
         state: present
-        key: "{{ lookup('file', 'id_user.pub') }}"
+        key: "{{ lookup('file', './id_ed25519.pub') }}"
     - name: Disable Password Authentication
       ansible.builtin.lineinfile:
         dest: /etc/ssh/sshd_config
@@ -38,15 +40,13 @@
         line: "PasswordAuthentication no"
         state: present
         backup: true
-    - name: Disable Root Login
-      ansible.builtin.lineinfile:
-        dest: /etc/ssh/sshd_config
-        regexp: '^PermitRootLogin'
-        line: "PermitRootLogin no"
-        state: present
-        backup: true
       notify:
         - Restart ssh
+  handlers:
+    - name: Restart ssh
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
 
 - name: Install Docker
   hosts: all
@@ -77,15 +77,9 @@
     - name: Install Docker
       ansible.builtin.apt:
         name:
-          - docker-ce
-          - docker-ce-cli
-          - docker-compose-plugin
-          - containerd.io
+          - docker
+          - docker.io
+          - docker-compose
+          - docker-registry
         state: latest
         update_cache: true
-
-  handlers:
-    - name: Restart ssh
-      ansible.builtin.service:
-        name: sshd
-        state: restarted
