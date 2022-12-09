@@ -1,0 +1,2 @@
+ansible_user: root
+ansible_ssh_private_key: /home/darkartheme/.ssh/ansible_ed25519

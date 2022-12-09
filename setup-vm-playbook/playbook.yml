@@ -1,0 +1,91 @@
+- name: Configure user
+  hosts: all
+  become: true
+  tasks:
+    - name: Add user
+      ansible.builtin.user:
+        name: user
+        state: present
+        shell: /bin/bash
+        expires: -1
+        generate_ssh_key: true
+        ssh_key_type: ed25519
+        ssh_key_comment: ansible-generated key
+        password: "*"
+    - name: Add user to sudoers
+      community.general.sudoers:
+        name: user-as-root
+        state: present
+        group: user
+        commands: ALL
+    - name: Fetch private key
+      ansible.builtin.fetch:
+        src: /home/user/.ssh/id_ed25519
+        dest: id_user_{{ ansible_host | lower }}
+    - name: Fetch public key
+      ansible.builtin.fetch:
+        src: /home/user/.ssh/id_ed25519.pub
+        dest: id_user.pub
+    - name: Add key to authorized keys
+      ansible.posix.authorized_key:
+        user: user
+        state: present
+        key: "{{ lookup('file', 'id_user.pub') }}"
+    - name: Disable Password Authentication
+      ansible.builtin.lineinfile:
+        dest: /etc/ssh/sshd_config
+        regexp: '^PasswordAuthentication'
+        line: "PasswordAuthentication no"
+        state: present
+        backup: true
+    - name: Disable Root Login
+      ansible.builtin.lineinfile:
+        dest: /etc/ssh/sshd_config
+        regexp: '^PermitRootLogin'
+        line: "PermitRootLogin no"
+        state: present
+        backup: true
+      notify:
+        - Restart ssh
+
+- name: Install Docker
+  hosts: all
+  become: true
+  tasks:
+    - name: Install apt-transport-https
+      ansible.builtin.apt:
+        name:
+          - apt-transport-https
+          - curl
+          - ca-certificates
+          - lsb-release
+          - gnupg
+        state: latest
+        update_cache: true
+
+    - name: Add signing key
+      ansible.builtin.apt_key:
+        url: "https://download.docker.com/linux/{{ ansible_distribution | lower }}/gpg"
+        state: present
+
+    - name: Add repository into sources list
+      ansible.builtin.apt_repository:
+        repo: "deb [arch={{ ansible_architecture }}] https://download.docker.com/linux/{{ ansible_distribution | lower }} {{ ansible_distribution_release }} stable"
+        state: present
+        filename: docker
+
+    - name: Install Docker
+      ansible.builtin.apt:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - docker-compose-plugin
+          - containerd.io
+        state: latest
+        update_cache: true
+
+  handlers:
+    - name: Restart ssh
+      ansible.builtin.service:
+        name: sshd
+        state: restarted
